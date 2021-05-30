@@ -1,0 +1,135 @@
+---
+title: "Reproducible Research - Project 1"
+author: "Angus Mackenzie"
+date: "30/05/2021"
+output: 
+  html_document:
+    keep_md: true
+---
+
+```{r setup, include=TRUE}
+## Setup
+options(scipen=999)
+knitr::opts_chunk$set(echo = TRUE)
+
+## Libraries
+library(tidyverse)
+library(lubridate)
+library(ggrepel)
+library(RColorBrewer)
+
+```
+
+## Loading and preprocessing the data
+
+Here is the data, downloaded and unzipped from the course website
+
+```{r}
+
+## Data
+download.file("https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip", "steps.zip")
+unzip(zipfile = "steps.zip")
+
+dfstep <- read.csv("activity.csv") %>%
+    mutate(date = ymd(date))
+
+```
+
+## What is mean total number of steps taken per day?
+
+```{r,dpi=500,fig.height=3,fig.width=7,fig.align='center'}
+
+## Steps per day
+dfstep_pd <- dfstep %>%
+  group_by(date) %>%
+  summarise(daily_steps = sum(steps, na.rm = TRUE))
+
+daily_steps_mean <- mean(dfstep_pd$daily_steps, na.rm = TRUE)
+daily_steps_median <- median(dfstep_pd$daily_steps, na.rm = TRUE)
+
+## Number of intervals
+n_interval <- length(unique(dfstep$interval))
+
+## Graph
+dfstep_pd %>%
+  ggplot(aes(x = daily_steps)) +
+  geom_histogram(fill = 'lightblue', binwidth = n_interval) +
+  theme_bw()
+
+
+```
+
+* The mean number of steps per day is `r daily_steps_mean`
+* The median number of steps per day is `r daily_steps_median`
+
+## What is the average daily activity pattern?
+```{r,dpi=500,fig.height=3,fig.width=7,fig.align='center'}
+
+## Time series
+dfstep_ts <- dfstep %>%
+  group_by(interval) %>%
+  summarise(interval_steps = mean(steps, na.rm = TRUE))
+
+interval_steps_max <- dfstep_ts$interval[which.max(dfstep_ts$interval_steps)]
+
+## Graph
+dfstep_ts %>% 
+  ggplot(aes(x = interval, y = interval_steps)) +
+  geom_line(color = 'blue') +
+  theme_bw()
+
+
+```
+
+The 5 minute interval with the greatest average steps is `r interval_steps_max`
+
+## Imputing missing values
+```{r,dpi=500,fig.height=3,fig.width=7,fig.align='center'}
+
+## Missing values
+dfstep_na <- dfstep %>%
+  filter(is.na(steps))
+
+missing_step_count <- nrow(dfstep_na)
+
+## Fill with mean
+dfstep_fill <- dfstep %>%
+  mutate(fill_steps = ifelse(is.na(steps), dfstep_ts$interval_steps[match(dfstep_ts$interval, interval)], steps)) %>%
+  group_by(date) %>%
+  summarise(fill_steps = sum(fill_steps, na.rm = TRUE))
+
+fill_steps_mean <- mean(dfstep_fill$fill_steps, na.rm = TRUE)
+fill_steps_median <- median(dfstep_fill$fill_steps, na.rm = TRUE)
+fill_total_diff <- sum(dfstep_fill$fill_steps) - sum(dfstep_pd$daily_steps)
+
+## Graph
+dfstep_fill %>%
+  ggplot(aes(x = fill_steps)) +
+  geom_histogram(fill = 'lightblue', binwidth = n_interval) +
+  theme_bw()
+```
+
+* Filling in missing values with the interval mean gives a different mean number of steps per day of `r fill_steps_mean`
+* Filling in missing values with the interval mean gives a different median number of steps per day of `r fill_steps_median`
+* The total steps taken after filling in missing values is `r fill_total_diff` more than before.
+
+## Are there differences in activity patterns between weekdays and weekends?
+
+```{r,dpi=500,fig.height=5,fig.width=7,fig.align='center'}
+
+## Separate weekdays
+vweekday <- c("Mon","Tue","Wed","Thu","Fri")
+
+dfstep_week <- dfstep %>%
+  mutate(iday = ifelse(weekdays(date, abbreviate = TRUE) %in% vweekday, "Weekday", "Weekend")) %>%
+  group_by(interval, iday) %>%
+  summarise(interval_steps = mean(steps, na.rm = TRUE))
+
+## Graph
+dfstep_week %>% 
+  ggplot(aes(x = interval, y = interval_steps)) +
+  facet_wrap(~iday, ncol = 1) +
+  geom_line(color = 'blue') +
+  theme_bw()
+```
+
